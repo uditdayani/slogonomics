@@ -38,7 +38,7 @@ with tabs[0]:
         "Impact (runs)": best["total_impact"].map(lambda v: f"{v:+.1f}"),
     })
     st.caption("The 50 highest match ratings (ties broken by impact in runs). Select a row to open the match.")
-    ev = st.dataframe(ui.style_ratings(table), hide_index=True, use_container_width=True,
+    ev = st.dataframe(ui.style_ratings(table), hide_index=True, width="stretch",
                       on_select="rerun", selection_mode="single-row", key="rec_best")
     open_on_select(ev, best, "match_id", "views/match.py", "match_id")
 
@@ -47,7 +47,7 @@ with tabs[1]:
     st.caption("Players with the most match ratings of 9 or higher. Select a row to open the player.")
     ev = st.dataframe(pd.DataFrame({"Player": most["name"], "9+ ratings": most["nine_plus"],
                                     "Rated matches": most["matches"], "% of matches": most["pct"]}),
-                      hide_index=True, use_container_width=True, on_select="rerun",
+                      hide_index=True, width="stretch", on_select="rerun",
                       selection_mode="single-row", key="rec_nine")
     open_on_select(ev, most, "player_id", "views/player.py", "player_id")
 
@@ -56,7 +56,7 @@ with tabs[2]:
     st.caption("Highest average rating, minimum 30 rated matches. Select a row to open the player.")
     ev = st.dataframe(ui.style_ratings(pd.DataFrame({"Player": avg["name"], "Rating": avg["average"],
                                                      "Rated matches": avg["matches"]})),
-                      hide_index=True, use_container_width=True, on_select="rerun",
+                      hide_index=True, width="stretch", on_select="rerun",
                       selection_mode="single-row", key="rec_avg")
     open_on_select(ev, avg, "player_id", "views/player.py", "player_id")
 
@@ -66,7 +66,7 @@ with tabs[3]:
     ev = st.dataframe(ui.style_ratings(pd.DataFrame({
         "Player": seasons["name"], "Rating": seasons["average"], "Year": seasons["year"].astype(str),
         "Competition": seasons["competition"], "Rated matches": seasons["matches"]})),
-        hide_index=True, use_container_width=True, on_select="rerun",
+        hide_index=True, width="stretch", on_select="rerun",
         selection_mode="single-row", key="rec_season")
     open_on_select(ev, seasons, "player_id", "views/player.py", "player_id")
 
@@ -79,7 +79,7 @@ with tabs[4]:
         "Player": cons["name"], "Rating": cons["average"], "Spread": cons["spread"],
         "Good days %": cons["pct_good"], "Off days %": cons["pct_off"],
         "Rated matches": cons["matches"]})),
-        hide_index=True, use_container_width=True, on_select="rerun",
+        hide_index=True, width="stretch", on_select="rerun",
         selection_mode="single-row", key="rec_cons")
     open_on_select(ev, cons, "player_id", "views/player.py", "player_id")
 
@@ -95,6 +95,6 @@ with tabs[5]:
             "Player": big["name"], "Rating": big["average"], "Knockouts": big["matches"],
             "Best": big["best"].map(ui.fmt_rating), "Other matches": big["other"].map(ui.fmt_rating),
             "Difference": [f"{d:+.2f}" if pd.notna(d) else "–" for d in big["difference"]],
-        })), hide_index=True, use_container_width=True, on_select="rerun",
+        })), hide_index=True, width="stretch", on_select="rerun",
             selection_mode="single-row", key="rec_big")
         open_on_select(ev, big, "player_id", "views/player.py", "player_id")

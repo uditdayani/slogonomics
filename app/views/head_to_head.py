@@ -86,6 +86,6 @@ table = pd.DataFrame({
     "Strike rate": m["strike_rate"], "Average": m["average"], "Dot %": m["dot_pct"],
     "Runs vs par per over": m["vs_par_per_over"],
 })
-st.dataframe(table, hide_index=True, use_container_width=True)
+st.dataframe(table, hide_index=True, width="stretch")
 st.caption("Balls exclude wides; outs count only dismissals credited to the bowler (not run outs). "
            "\"Matches\" in the All row is the total across competitions.")

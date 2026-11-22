@@ -45,7 +45,7 @@ else:
         "Player": best["name"], "Rating": best["average"], "Matches": best["matches"],
         "Best here": best["best"].map(ui.fmt_rating), "Elsewhere": best["elsewhere"].map(ui.fmt_rating),
         "Difference": [f"{d:+.2f}" if pd.notna(d) else "–" for d in best["difference"]],
-    })), hide_index=True, use_container_width=True, on_select="rerun",
+    })), hide_index=True, width="stretch", on_select="rerun",
         selection_mode="single-row", key="venue_best")
     rows = ev.selection.rows if ev else []
     if rows:
@@ -59,7 +59,7 @@ st.dataframe(ui.style_ratings(pd.DataFrame({
     "Date": top["match_date"].dt.strftime("%d %b %Y"),
     "Batting": [ui.batting_line(*x) for x in zip(top["runs"], top["balls_faced"], top["dismissed"])],
     "Bowling": [ui.bowling_line(*x) for x in zip(top["wickets"], top["runs_conceded"], top["balls_bowled"])],
-})), hide_index=True, use_container_width=True)
+})), hide_index=True, width="stretch")
 
 st.subheader("Recent matches here")
 recent = here.sort_values("match_date", ascending=False).head(10).reset_index(drop=True)
@@ -70,7 +70,7 @@ ev = st.dataframe(pd.DataFrame({
                zip(recent["inn1_runs"], recent["inn1_wickets"], recent["inn1_balls"],
                    recent["inn2_runs"], recent["inn2_wickets"], recent["inn2_balls"])],
     "Result": [ui.result_line(r) for _, r in recent.iterrows()],
-}), hide_index=True, use_container_width=True, on_select="rerun",
+}), hide_index=True, width="stretch", on_select="rerun",
     selection_mode="single-row", key="venue_recent")
 rows = ev.selection.rows if ev else []
 if rows:

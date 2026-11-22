@@ -36,7 +36,7 @@ head = st.container()
 if not photo.empty:
     pic, head = st.columns([1, 4], vertical_alignment="center")
     p = photo.iloc[0]
-    pic.image(p["image_url"], use_container_width=True)
+    pic.image(p["image_url"], width="stretch")
     credit = " · ".join(str(x) for x in (p["artist"], p["license"]) if isinstance(x, str) and x)
     pic.caption(f"[Photo]({p['page_url']}){': ' + credit if credit else ''}, via Wikimedia Commons")
 head.title(players.loc[players["player_id"] == pid, "name"].iloc[0])
@@ -84,7 +84,7 @@ recent = mr.head(20).sort_values("match_date")
 if not recent.empty:
     st.subheader("Last 20 ratings")
     recent = recent.assign(label=recent["team"] + " v " + recent["opponent"] + " · " + recent["competition"])
-    st.altair_chart(ui.rating_chart(recent), use_container_width=True)
+    st.altair_chart(ui.rating_chart(recent), width="stretch")
 
 # --- what drives the ratings
 if len(mr):
@@ -99,7 +99,7 @@ if len(mr):
 left, right = st.columns(2)
 with left:
     st.subheader("Teams played for")
-    st.dataframe(stats.teams_played_for(ratings, pid), hide_index=True, use_container_width=True)
+    st.dataframe(stats.teams_played_for(ratings, pid), hide_index=True, width="stretch")
 with right:
     st.subheader("Best grounds")
     pv = stats.player_venues(ratings, matches, pid)
@@ -112,7 +112,7 @@ with right:
             "Matches": pv["matches"].values,
             "Rating": pv["average"].values,
             "vs elsewhere": [f"{d:+.2f}" for d in pv["difference"]],
-        }).pipe(ui.style_ratings), hide_index=True, use_container_width=True)
+        }).pipe(ui.style_ratings), hide_index=True, width="stretch")
         st.caption("Average rating at each ground (3+ rated matches), and the difference from "
                    "his average everywhere else.")
 
@@ -137,7 +137,7 @@ if not matchups.empty:
                 "Balls": show["balls"].values, "Runs": show["runs"].values,
                 "Outs": show["dismissals"].values, "Strike rate": show["strike_rate"].values,
                 "Runs vs par per over": [f"{e:+.2f}" for e in show["edge"]],
-            }), hide_index=True, use_container_width=True)
+            }), hide_index=True, width="stretch")
             st.caption(f"His most frequent {who}. Runs vs par is from his side: positive means he "
                        "came out on top. Open the Head-to-head page for any pairing.")
 
@@ -169,7 +169,7 @@ table = pd.DataFrame({
     "Impact (runs)": shown["total_impact"].map(lambda v: f"{v:+.1f}"),
 })
 st.caption(f"{len(log)} matches · select a row to open the match. \"–\" means too little involvement to rate.")
-event = st.dataframe(ui.style_ratings(table), hide_index=True, use_container_width=True,
+event = st.dataframe(ui.style_ratings(table), hide_index=True, width="stretch",
                      on_select="rerun", selection_mode="single-row", key="player_log")
 rows = event.selection.rows if event else []
 if rows:

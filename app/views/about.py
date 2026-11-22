@@ -55,7 +55,7 @@ if not checks.empty:
     passed = int(checks["passed"].sum())
     st.caption(f"{passed} of {len(checks)} validation checks pass for this model version.")
     st.dataframe(checks[["check", "scope", "value", "target", "passed", "detail"]].rename(columns=str.capitalize),
-                 hide_index=True, use_container_width=True)
+                 hide_index=True, width="stretch")
 
 st.subheader("Known limitations")
 st.markdown("""

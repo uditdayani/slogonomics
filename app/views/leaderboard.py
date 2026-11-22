@@ -28,7 +28,7 @@ table = board.assign(
 )[["Rank", "Player", "Rating", "Matches", "Last_played"]].rename(columns={"Last_played": "Last played"})
 
 st.caption("Select a row to open the player.")
-event = st.dataframe(ui.style_ratings(table), hide_index=True, use_container_width=True,
+event = st.dataframe(ui.style_ratings(table), hide_index=True, width="stretch",
                      on_select="rerun", selection_mode="single-row", key="leaderboard")
 rows = event.selection.rows if event else []
 if rows:

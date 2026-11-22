@@ -249,3 +249,15 @@ def test_momentum_projection_and_swing_balls():
     assert stats.describe_ball(top.iloc[0], names) == "Bumrah to Kohli: **Kohli out**, bowled"
     assert stats.describe_ball(top.iloc[1], names) == "Kohli hits a **four** off Bumrah"
     assert stats.momentum(pd.DataFrame()).empty
+
+
+def test_team_of_the_season_copes_with_blank_teams_and_stages():
+    # Real data has some rows with no team or batting stage; a player whose team is blank in
+    # every row crashed the page (mode() of nothing). He's still picked, with no team shown.
+    rows = []
+    for i in range(12):
+        rows += season(f"bat{i}", 8, 7.0 + i * 0.1)
+    rows += [dict(r, team=None, batting_stage=None) for r in season("ghost", 8, 9.0)]
+    xi = stats.team_of_season(frame(rows), "IPL", 2024)
+    ghost = xi.set_index("player_id").loc["ghost"]
+    assert pd.isna(ghost["team"]) and pd.isna(ghost["stage"])

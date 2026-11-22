@@ -336,6 +336,12 @@ STAGE_ORDER = {"opener": 0, "top order": 1, "middle order": 2, "finisher": 3}
 SHRINK = 3   # matches of an average (6.5) rating added to every player's record
 
 
+def _most_common(x: pd.Series):
+    """The most frequent non-blank value, or None if every value is blank."""
+    m = x.dropna().mode()
+    return m.iloc[0] if len(m) else None
+
+
 def season_players(ratings: pd.DataFrame, competition: str, year: int, min_matches: int = 6) -> pd.DataFrame:
     """Everyone with `min_matches`+ rated matches in one year of one competition, with a role
     and a selection score: their average shrunk towards 6.5 by 3 matches, so a short great
@@ -350,8 +356,8 @@ def season_players(ratings: pd.DataFrame, competition: str, year: int, min_match
         matches=("match_id", "nunique"), average=("rating", "mean"), total=("rating", "sum"),
         best=("rating", "max"), faced=("balls_faced", "sum"), bowled=("balls_bowled", "sum"),
         stumpings=("stumpings", "sum"), byes=("byes", "sum"),
-        team=("team", lambda x: x.mode().iloc[0]),
-        stage=("batting_stage", lambda x: x.dropna().mode().iloc[0] if x.notna().any() else None),
+        team=("team", _most_common),
+        stage=("batting_stage", _most_common),
     ).reset_index()
     g = g[g["matches"] >= min_matches]
     faced_pm, bowled_pm = g["faced"] / g["matches"], g["bowled"] / g["matches"]

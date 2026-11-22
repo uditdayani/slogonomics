@@ -36,7 +36,7 @@ table = pd.DataFrame({
     "Team": xi["team"], "Rating": xi["average"], "Matches": xi["matches"],
     "Best": xi["best"].map(ui.fmt_rating),
 })
-ev = st.dataframe(ui.style_ratings(table), hide_index=True, use_container_width=True,
+ev = st.dataframe(ui.style_ratings(table), hide_index=True, width="stretch",
                   on_select="rerun", selection_mode="single-row", key="tots")
 rows = ev.selection.rows if ev else []
 if rows:
@@ -51,4 +51,4 @@ if not bench.empty:
     st.dataframe(ui.style_ratings(pd.DataFrame({
         "Player": nxt["name"], "Role": nxt["role"].str.capitalize(), "Team": nxt["team"],
         "Rating": nxt["average"].round(2), "Matches": nxt["matches"],
-    })), hide_index=True, use_container_width=True)
+    })), hide_index=True, width="stretch")

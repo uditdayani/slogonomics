@@ -71,7 +71,7 @@ for col, team in zip(cols, [m["team_1"], m["team_2"]]):
     })
     with col:
         st.subheader(team)
-        st.dataframe(ui.style_ratings(table), hide_index=True, use_container_width=True)
+        st.dataframe(ui.style_ratings(table), hide_index=True, width="stretch")
 st.caption("★ official player of the match · \"–\" too little involvement to rate · "
            "par = wickets/runs a typical bowler gets from the same overs with the same wickets down, "
            "adjusted for competition, season and ground")
@@ -102,7 +102,7 @@ if not mom.empty:
     if pd.notna(m["inn1_runs"]) and (mom["innings_no"] == 2).any():
         target = pd.DataFrame({"target": [int(m["inn1_runs"]) + 1]})
         layers.append(alt.Chart(target).mark_rule(strokeDash=[5, 4], color="#888").encode(y="target:Q"))
-    st.altair_chart(alt.layer(*layers).properties(height=320), use_container_width=True)
+    st.altair_chart(alt.layer(*layers).properties(height=320), width="stretch")
     st.caption("Projected total after each ball: runs so far plus what a typical side adds from "
                "there (balls left, wickets down, conditions). Red dots are wickets"
                + ("; the dashed line is the target" if (mom["innings_no"] == 2).any() else "")
@@ -117,6 +117,6 @@ if not mom.empty:
         "Score": swings["score"].values,
         "Heading for": [f"{int(a)} → {int(b)}" for a, b in zip(swings["projected_before"], swings["projected"])],
         "Swing (runs)": [f"{v:+.1f}" for v in swings["runs_added"]],
-    }), hide_index=True, use_container_width=True)
+    }), hide_index=True, width="stretch")
     st.caption("The balls that moved the projected total most: wickets cost the batting side the "
                "runs it was expected to add with that batter, boundaries add runs above expectation.")
