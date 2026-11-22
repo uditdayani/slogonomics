@@ -11,6 +11,7 @@ from pyspark.sql import functions as F
 
 from . import storage
 from .config import Tables
+from .params import for_version
 
 CALIBRATION_MAX_RUNS = 3.0      # |avg first-innings runs added| per competition, since CALIBRATION_FROM
 CALIBRATION_FROM = 2019
@@ -177,22 +178,35 @@ def scale(ratings: DataFrame) -> List[dict]:
     return out
 
 
-def _roles(ratings: DataFrame) -> DataFrame:
-    """Flags per involved performance. When a player batted and bowled, the part with more
-    balls is the main one (as in gold_scale.rate, where the other part counts partly)."""
+def _roles(ratings: DataFrame, by_role: bool = False) -> DataFrame:
+    """Flags per involved performance. When a player batted and bowled, the main part is the
+    one gold_scale.rate counts in full: by raw balls (v3), or with `by_role` (v4+) by balls
+    relative to a typical innings at that batting stage / a typical spell, so a finisher's
+    11-ball cameo next to 24 balls bowled is a batting performance."""
     r = (ratings.filter("involved")
          .withColumn("_bowled", F.col("balls_bowled") >= 6)
          .withColumn("_batted", (F.col("balls_faced") > 0) | (F.col("dismissed") > 0)))
-    return r.withColumn("_main_bowling", F.col("_bowled") & (~F.col("_batted") | (F.col("balls_faced") < F.col("balls_bowled"))))
+    faced, bowled = F.col("balls_faced").cast("double"), F.col("balls_bowled").cast("double")
+    if by_role:
+        stage = F.coalesce(F.col("batting_stage"), F.lit("all")) if "batting_stage" in r.columns else F.lit("all")
+        r = r.withColumn("_stage", stage)
+        typ_bat = (r.filter("_batted").groupBy("competition", "_stage")
+                   .agg(F.percentile_approx("balls_faced", 0.5).cast("double").alias("_typ_bat")))
+        typ_bowl = (r.filter("_bowled").groupBy("competition")
+                    .agg(F.percentile_approx("balls_bowled", 0.5).cast("double").alias("_typ_bowl")))
+        r = r.join(typ_bat, ["competition", "_stage"], "left").join(typ_bowl, "competition", "left")
+        faced = faced / F.greatest(F.coalesce(F.col("_typ_bat"), F.lit(1.0)), F.lit(1.0))
+        bowled = bowled / F.greatest(F.coalesce(F.col("_typ_bowl"), F.lit(24.0)), F.lit(1.0))
+    return r.withColumn("_main_bowling", F.col("_bowled") & (~F.col("_batted") | (faced < bowled)))
 
 
-def role_balance(ratings: DataFrame) -> List[dict]:
+def role_balance(ratings: DataFrame, by_role: bool = False) -> List[dict]:
     """Bowling's share of 9+ ratings should match its share of performances: with batting
     ranked against batting and bowling against bowling, any innings or spell should be about
     equally likely to reach 9. Each performance counts once, by its main part (the one with
     more balls), so a bowler's 3-ball tail-end innings isn't counted as a batting chance.
     Fair share = performances led by bowling / performances led by batting or bowling."""
-    r = _roles(ratings).withColumn("_main_batting", F.col("_batted") & ~F.col("_main_bowling"))
+    r = _roles(ratings, by_role).withColumn("_main_batting", F.col("_batted") & ~F.col("_main_bowling"))
     rows = r.groupBy("competition").agg(
         F.sum(F.col("_main_bowling").cast("int")).alias("spells"),
         F.sum(F.col("_main_batting").cast("int")).alias("innings"),
@@ -285,7 +299,8 @@ def run_validation(spark: SparkSession, t: Tables, version: str) -> Tuple[List[d
     results = (calibration(of_version(t.gold_ball_values))
                + rain_calibration(of_version(t.gold_ball_values), spark.table(t.silver_matches))
                + wicket_costs(of_version(t.gold_ball_values))
-               + scale(ratings) + era_flatness(ratings) + role_balance(ratings) + both_roles(ratings)
+               + scale(ratings) + era_flatness(ratings) + role_balance(ratings, for_version(version).secondary == "role")
+               + both_roles(ratings)
                + stage_balance(ratings) + cameo_vs_anchor(ratings)
                + player_of_match(ratings, spark.table(t.silver_matches)))
     spot_rows, spot_table = famous_performances(spark, ratings, spark.table(t.silver_players))

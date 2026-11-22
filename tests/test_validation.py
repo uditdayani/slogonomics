@@ -124,6 +124,21 @@ def test_role_balance_against_fair_share(spark):
     assert "fair share 42.3%" in t["target"]                              # 44 / 104, not 44 / 148
 
 
+def test_fair_share_follows_the_versions_definition_of_main_part(spark):
+    # 40 finishers' 11-ball cameos next to 24 balls bowled (typical finisher innings: 6 balls,
+    # typical spell: 24). By raw balls (v3) they're bowling performances; by role (v4) batting.
+    cols = ROLE_RATING_COLS + ", batting_stage string"
+    rows = [("Cup", 6.5, 5.0, 0.0, True, 0, 6, 1, "finisher")] * 60          # typical finishers
+    rows += [("Cup", 6.5, 0.0, 5.0, True, 24, 0, 0, None)] * 60              # typical bowlers
+    rows += [("Cup", 9.5, 20.0, -5.0, True, 24, 11, 0, "finisher")] * 40     # Springer-like, batting-led
+    df = spark.createDataFrame(rows, cols)
+    [raw] = validation.role_balance(df)
+    [role] = validation.role_balance(df, by_role=True)
+    assert "fair share 62.5%" in raw["target"] and not raw["passed"]          # 100 of 160 "bowling"
+    assert "fair share 37.5%" in role["target"]                                # 60 of 160
+    assert role["value"] == 0.0
+
+
 def test_both_roles(spark):
     bat = ("Even", 6.5, 5.0, 0.0, True, 0, 20, 1)
     both = ("Even", 6.5, 5.0, 2.0, True, 12, 10, 1)
