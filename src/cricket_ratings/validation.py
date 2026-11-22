@@ -11,6 +11,7 @@ from pyspark.sql import functions as F
 
 from . import storage
 from .config import Tables
+from .params import for_version
 
 CALIBRATION_MAX_RUNS = 3.0      # |avg first-innings runs added| per competition, since CALIBRATION_FROM
 CALIBRATION_FROM = 2019
@@ -18,7 +19,7 @@ CALIBRATION_MIN_INNINGS = 50
 RAIN_MAX_RUNS = 5.0            # |avg first-innings runs added| in rain-affected matches
 MAX_WICKET_COST = 25.0         # runs; a single dismissal shouldn't cost more...
 MAX_COSTLY_PER_10K = 1.0       # ...except in fewer than 1 in 10,000 dismissals
-ERA_MAX_RANGE = 2.5            # percentage points between seasons' shares of 9+ ratings
+ERA_MAX_DRIFT = 1.0            # percentage points of trend in the 9+ share across all seasons
 ERA_MIN_RATED = 1000           # only seasons with enough rated performances
 STAGE_MAX_SPREAD_RATIO = 1.3   # widest / narrowest rating spread across batting stages
 STAGE_MAX_SHARE_RATIO = 2.0    # highest / lowest share of 9+ (and of 4 or less) across stages
@@ -94,18 +95,33 @@ def wicket_costs(ball_values: DataFrame) -> List[dict]:
 
 
 def era_flatness(ratings: DataFrame) -> List[dict]:
-    """The share of 9+ ratings should be roughly the same every season. V1 ranged from about
-    2% to 5% because high-scoring modern seasons produce bigger swings in runs."""
+    """The share of 9+ ratings shouldn't drift across seasons. V1's did: it rose to about 5% in
+    high-scoring modern seasons. Measured as the trend (least-squares line through each
+    season's share, weighted by its ratings) across the whole span, so one noisy season can't
+    fail it: with about 1,400 ratings a season, chance alone moves single seasons by +-0.5
+    points and the highest-minus-lowest range of 19 seasons is typically 1.8 points."""
     yearly = (ratings.filter("involved").groupBy("competition", F.year("match_date").alias("year"))
               .agg(F.count("*").alias("n"), (100 * F.avg((F.col("rating") >= 9).cast("double"))).alias("pct"))
-              .filter(F.col("n") >= ERA_MIN_RATED))
-    rows = (yearly.groupBy("competition").agg(F.count("*").alias("years"), F.min("pct").alias("lo"),
-                                              F.max("pct").alias("hi"))
-            .filter("years >= 3").orderBy("competition").collect())
-    return [_row("era_9_plus_range", r.competition, round(r.hi - r.lo, 2), f"<= {ERA_MAX_RANGE} points",
-                 r.hi - r.lo <= ERA_MAX_RANGE,
-                 f"{r.years} seasons with {ERA_MIN_RATED}+ ratings: {r.lo:.1f}% to {r.hi:.1f}% rated 9+")
-            for r in rows]
+              .filter(F.col("n") >= ERA_MIN_RATED)).collect()
+    out = []
+    for comp in sorted({r.competition for r in yearly}):
+        seasons = sorted((r.year, r.pct, r.n) for r in yearly if r.competition == comp)
+        if len(seasons) < 3:
+            continue
+        years = [y for y, _, _ in seasons]
+        pcts = [p for _, p, _ in seasons]
+        weights = [n for _, _, n in seasons]
+        wsum = sum(weights)
+        my = sum(w * y for w, y in zip(weights, years)) / wsum
+        mp = sum(w * p for w, p in zip(weights, pcts)) / wsum
+        slope = (sum(w * (y - my) * (p - mp) for w, y, p in zip(weights, years, pcts))
+                 / max(sum(w * (y - my) ** 2 for w, y in zip(weights, years)), 1e-9))
+        drift = slope * (years[-1] - years[0])
+        out.append(_row("era_9_plus_drift", comp, round(drift, 2), f"|trend| <= {ERA_MAX_DRIFT} points",
+                        abs(drift) <= ERA_MAX_DRIFT,
+                        f"{len(seasons)} seasons with {ERA_MIN_RATED}+ ratings, {years[0]}-{years[-1]}: "
+                        f"{min(pcts):.1f}% to {max(pcts):.1f}% rated 9+ (range {max(pcts) - min(pcts):.2f})"))
+    return out
 
 
 def _pure_batters(ratings: DataFrame) -> DataFrame:
@@ -177,22 +193,35 @@ def scale(ratings: DataFrame) -> List[dict]:
     return out
 
 
-def _roles(ratings: DataFrame) -> DataFrame:
-    """Flags per involved performance. When a player batted and bowled, the part with more
-    balls is the main one (as in gold_scale.rate, where the other part counts partly)."""
+def _roles(ratings: DataFrame, by_role: bool = False) -> DataFrame:
+    """Flags per involved performance. When a player batted and bowled, the main part is the
+    one gold_scale.rate counts in full: by raw balls (v3), or with `by_role` (v4+) by balls
+    relative to a typical innings at that batting stage / a typical spell, so a finisher's
+    11-ball cameo next to 24 balls bowled is a batting performance."""
     r = (ratings.filter("involved")
          .withColumn("_bowled", F.col("balls_bowled") >= 6)
          .withColumn("_batted", (F.col("balls_faced") > 0) | (F.col("dismissed") > 0)))
-    return r.withColumn("_main_bowling", F.col("_bowled") & (~F.col("_batted") | (F.col("balls_faced") < F.col("balls_bowled"))))
+    faced, bowled = F.col("balls_faced").cast("double"), F.col("balls_bowled").cast("double")
+    if by_role:
+        stage = F.coalesce(F.col("batting_stage"), F.lit("all")) if "batting_stage" in r.columns else F.lit("all")
+        r = r.withColumn("_stage", stage)
+        typ_bat = (r.filter("_batted").groupBy("competition", "_stage")
+                   .agg(F.percentile_approx("balls_faced", 0.5).cast("double").alias("_typ_bat")))
+        typ_bowl = (r.filter("_bowled").groupBy("competition")
+                    .agg(F.percentile_approx("balls_bowled", 0.5).cast("double").alias("_typ_bowl")))
+        r = r.join(typ_bat, ["competition", "_stage"], "left").join(typ_bowl, "competition", "left")
+        faced = faced / F.greatest(F.coalesce(F.col("_typ_bat"), F.lit(1.0)), F.lit(1.0))
+        bowled = bowled / F.greatest(F.coalesce(F.col("_typ_bowl"), F.lit(24.0)), F.lit(1.0))
+    return r.withColumn("_main_bowling", F.col("_bowled") & (~F.col("_batted") | (faced < bowled)))
 
 
-def role_balance(ratings: DataFrame) -> List[dict]:
+def role_balance(ratings: DataFrame, by_role: bool = False) -> List[dict]:
     """Bowling's share of 9+ ratings should match its share of performances: with batting
     ranked against batting and bowling against bowling, any innings or spell should be about
     equally likely to reach 9. Each performance counts once, by its main part (the one with
     more balls), so a bowler's 3-ball tail-end innings isn't counted as a batting chance.
     Fair share = performances led by bowling / performances led by batting or bowling."""
-    r = _roles(ratings).withColumn("_main_batting", F.col("_batted") & ~F.col("_main_bowling"))
+    r = _roles(ratings, by_role).withColumn("_main_batting", F.col("_batted") & ~F.col("_main_bowling"))
     rows = r.groupBy("competition").agg(
         F.sum(F.col("_main_bowling").cast("int")).alias("spells"),
         F.sum(F.col("_main_batting").cast("int")).alias("innings"),
@@ -285,7 +314,8 @@ def run_validation(spark: SparkSession, t: Tables, version: str) -> Tuple[List[d
     results = (calibration(of_version(t.gold_ball_values))
                + rain_calibration(of_version(t.gold_ball_values), spark.table(t.silver_matches))
                + wicket_costs(of_version(t.gold_ball_values))
-               + scale(ratings) + era_flatness(ratings) + role_balance(ratings) + both_roles(ratings)
+               + scale(ratings) + era_flatness(ratings) + role_balance(ratings, for_version(version).secondary == "role")
+               + both_roles(ratings)
                + stage_balance(ratings) + cameo_vs_anchor(ratings)
                + player_of_match(ratings, spark.table(t.silver_matches)))
     spot_rows, spot_table = famous_performances(spark, ratings, spark.table(t.silver_players))

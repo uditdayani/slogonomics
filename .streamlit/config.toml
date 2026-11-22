@@ -1,11 +1,19 @@
 # Slogonomics look: Streamlit Community Cloud reads this from the repo's .streamlit folder.
+# Dark theme; visitors can still pick Light under ⋮ → Settings.
 [theme]
-base = "light"
-primaryColor = "#0E7C66"              # pitch green: buttons, selected tabs, sliders
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F2F6F4"  # sidebar and inputs
-textColor = "#1B2420"
+base = "dark"
+primaryColor = "#2FB38F"              # pitch green: buttons, selected tabs, sliders
+backgroundColor = "#0E1513"
+secondaryBackgroundColor = "#17211E"  # inputs, table headers
+textColor = "#E6EDEA"
+borderColor = "#2A3833"
+linkColor = "#5FD3B0"
 font = "sans serif"
+baseRadius = "medium"
+chartCategoricalColors = ["#5B8DEF", "#F0A030", "#2FB38F", "#E5484D", "#A78BFA", "#F472B6"]
+
+[theme.sidebar]
+backgroundColor = "#121B18"
 
 [client]
 toolbarMode = "viewer"                # hide developer options from visitors

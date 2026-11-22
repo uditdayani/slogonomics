@@ -8,7 +8,7 @@
 # MAGIC
 # MAGIC | Widget | Default | |
 # MAGIC | --- | --- | --- |
-# MAGIC | `model_version` | `v3` | the ratings the dashboard shows |
+# MAGIC | `model_version` | `v4` | the ratings the dashboard shows |
 # MAGIC | `repo` | `uditdayani/slogonomics` | where the release lives |
 # MAGIC | `publish` | `yes` | `no`: only write the files to the volume (to check them) |
 # MAGIC
@@ -39,7 +39,7 @@ import queries
 from cricket_ratings import export
 
 dbutils.widgets.text("catalog", "workspace")
-dbutils.widgets.text("model_version", "v3")
+dbutils.widgets.text("model_version", "v4")
 dbutils.widgets.text("repo", "uditdayani/slogonomics")
 dbutils.widgets.dropdown("publish", "yes", ["yes", "no"])
 CATALOG, VERSION = dbutils.widgets.get("catalog"), dbutils.widgets.get("model_version")

@@ -39,7 +39,7 @@ def _secrets(section: str) -> dict:
 def settings() -> dict:
     db, app = _secrets("databricks"), _secrets("app")
     return {"catalog": db.get("catalog", "workspace"),
-            "version": app.get("model_version", "v3"),
+            "version": app.get("model_version", "v4"),
             "demo_dir": os.environ.get("CRICKET_RATINGS_DATA_DIR"),
             "data_url": os.environ.get("CRICKET_RATINGS_DATA_URL") or _secrets("data").get("url")}
 

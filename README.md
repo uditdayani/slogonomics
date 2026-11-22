@@ -123,6 +123,19 @@ Wicket shares (starting values): bowled, lbw, hit wicket, caught and bowled 100%
 - **Involvement:** players are rated only if they faced 5 balls, bowled an over, were dismissed, or took part in a dismissal; others show "–".
 - **Form:** weighted average of the last 10 ratings, each match counting half as much every 5 matches back; needs 3 rated matches. Leaderboards rank active players (played in the last 12 months) with 5+ rated matches, overall and per competition.
 
+## Model v4 (V2.3): refinements from spot-checking V2.1
+
+Spot-checking real matches after V2.1 turned up seven judgement calls (none were bugs). `v4` changes them; `v3` keeps its settings exactly (`src/cricket_ratings/params.py`), so both can run side by side until `v4` passes validation.
+
+| # | What looked wrong in `v3` | `v4` change |
+| --- | --- | --- |
+| 1 | Par came from the season and ground only, so a slow innings on a slow pitch was over-penalised | The scoring level moves 40% of the way towards the match's own scoring rate (ratio held to 0.6–1.6) |
+| 2 | With many wickets down a ball barely costs anything, so a slow rebuild with the tail looked too good | A batter is charged at least half the par runs for each ball he faces (bowlers unchanged) |
+| 3 | One ball either side of the 60- and 30-balls-left lines changed the comparison group | Within 10 balls of an edge, the innings is also ranked against the neighbouring stage and the two blended (50/50 at the edge) |
+| 4, 7 | An all-rounder's smaller part was weighted against 24 balls whatever it was: Springer's 35* off 11 as a finisher counted only 11/35 | The part with fewer balls is still the smaller one, but a short innings is weighted against a typical innings *at that stage* (`n / (n + 1.5 × typical)`), so Springer's cameo counts about 55% (a tail-ender's 4-ball slog about 30%); a bowler's full spell always counts in full |
+| 5 | The bottom quarter was squeezed between 3.0 and 5.8, so common failures looked mild | New anchors: 10th percentile → 4.5, 25th → 5.5 (median and top unchanged) |
+| 6 | Role-relative ranking rated a costly opener failure (−17 runs) above a rarer but cheaper bowling failure (−15 runs) | 10% of the score is the plain within-competition rank of impact in runs (20% brought back part of V1's batting bias) |
+
 ## Validation
 
 `08_validation` checks one model version and fails if any check fails:
@@ -134,7 +147,7 @@ Wicket shares (starting values): bowled, lbw, hit wicket, caught and bowled 100%
 | Dismissals costing over 25 runs | fewer than 1 in 10,000 |
 | Median rating per competition | 6.2–6.8 |
 | Ratings at 9.3+ per competition | 0.5–2% |
-| Share of 9+ ratings: highest season minus lowest (seasons with 1,000+ ratings) | at most 2.5 points |
+| Share of 9+ ratings: trend across seasons (seasons with 1,000+ ratings; one noisy season can't fail it) | within ±1 point over the whole span |
 | 9+ ratings driven mainly by bowling | within 5 points of bowling's fair share (performances led by bowling ÷ all; a performance with both counts once, by the part with more balls) |
 | Players who batted and bowled: share of 9+ (or 4 or less) ÷ share of all ratings | at most 1.3 |
 | Batting stages: widest / narrowest rating spread | at most 1.3 |

@@ -11,10 +11,10 @@ data as Parquet files. If any step fails, the later steps don't run and you get 
 | 1 | `land_bronze` | `notebooks/02_bronze_land` | `catalog` = `workspace`, `download` = `recent`, `sources` = `recent_male` (`venue_register` defaults to `yes`) | – |
 | 2 | `build_silver` | `notebooks/03_silver_build` | `catalog` = `workspace` | `land_bronze` |
 | 3 | `silver_checks` | `notebooks/04_silver_checks` | `catalog` = `workspace` | `build_silver` |
-| 4 | `ratings` | `notebooks/06_gold_ratings` | `catalog` = `workspace`, `model_version` = `v3` | `silver_checks` |
-| 5 | `scale_and_form` | `notebooks/07_gold_scale_form` | `catalog` = `workspace`, `model_version` = `v3` | `ratings` |
-| 6 | `validation` | `notebooks/08_validation` | `catalog` = `workspace`, `model_version` = `v3` | `scale_and_form` |
-| 7 | `export_parquet` | `notebooks/09_export_parquet` | `catalog` = `workspace`, `model_version` = `v3` | `validation` |
+| 4 | `ratings` | `notebooks/06_gold_ratings` | `catalog` = `workspace`, `model_version` = `v4` | `silver_checks` |
+| 5 | `scale_and_form` | `notebooks/07_gold_scale_form` | `catalog` = `workspace`, `model_version` = `v4` | `ratings` |
+| 6 | `validation` | `notebooks/08_validation` | `catalog` = `workspace`, `model_version` = `v4` | `scale_and_form` |
+| 7 | `export_parquet` | `notebooks/09_export_parquet` | `catalog` = `workspace`, `model_version` = `v4` | `validation` |
 
 Task 7 needs a GitHub token stored once as a Databricks secret (see the top of notebook 09).
 Because it runs after validation, the dashboard never receives ratings that failed a check.

@@ -1,7 +1,7 @@
 """Slogonomics – Streamlit dashboard (entry point).
 
 Data comes from the Parquet export ([data] url) or, without it, the Databricks SQL
-warehouse ([databricks] secrets); optionally [app] model_version (default "v3").
+warehouse ([databricks] secrets); optionally [app] model_version (default "v4").
 See .streamlit/secrets.toml.example and app/data.py.
 """
 import os

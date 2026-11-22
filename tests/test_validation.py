@@ -51,16 +51,20 @@ def test_era_flatness(spark):
         k = round(n * pct9 / 100)
         return [(comp, dt.date(year, 5, 1), True, 9.5)] * k + [(comp, dt.date(year, 5, 1), True, 6.5)] * (n - k)
     rows = []
-    for y, p in ((2015, 3.0), (2020, 3.5), (2025, 4.0)):
+    for y, p in ((2015, 3.0), (2020, 3.6), (2025, 3.2)):
         rows += season("Flat", y, p)
-    for y, p in ((2015, 2.0), (2020, 3.0), (2025, 5.0)):
+    for y, p in ((2015, 2.0), (2020, 3.0), (2025, 5.0)):                   # V1-like: rising
         rows += season("Drifting", y, p)
+    for y, p in ((2015, 2.0), (2018, 4.6), (2021, 2.0), (2025, 3.0)):      # one wild season, no trend
+        rows += season("Noisy", y, p)
     rows += season("Tiny", 2025, 9.0, n=200)                                 # too small: ignored
     r = by_scope(validation.era_flatness(spark.createDataFrame(
         rows, "competition string, match_date date, involved boolean, rating double")))
-    assert r[("era_9_plus_range", "Flat")]["passed"] and r[("era_9_plus_range", "Flat")]["value"] == 1.0
-    assert not r[("era_9_plus_range", "Drifting")]["passed"]
-    assert ("era_9_plus_range", "Tiny") not in r
+    assert r[("era_9_plus_drift", "Flat")]["passed"] and r[("era_9_plus_drift", "Flat")]["value"] == 0.2
+    assert not r[("era_9_plus_drift", "Drifting")]["passed"]                 # +3 points
+    noisy = r[("era_9_plus_drift", "Noisy")]
+    assert noisy["passed"] and "range 2.60" in noisy["detail"]               # the old check failed this
+    assert ("era_9_plus_drift", "Tiny") not in r
 
 
 RATING_COLS = ("batting_stage string, rating double, involved boolean, balls_bowled int, "
@@ -122,6 +126,21 @@ def test_role_balance_against_fair_share(spark):
     [t] = validation.role_balance(spark.createDataFrame(
         tail + [("Tail", 9.5, 1.0, 30.0, True, 24, 2, 1)] * 4, ROLE_RATING_COLS))
     assert "fair share 42.3%" in t["target"]                              # 44 / 104, not 44 / 148
+
+
+def test_fair_share_follows_the_versions_definition_of_main_part(spark):
+    # 40 finishers' 11-ball cameos next to 24 balls bowled (typical finisher innings: 6 balls,
+    # typical spell: 24). By raw balls (v3) they're bowling performances; by role (v4) batting.
+    cols = ROLE_RATING_COLS + ", batting_stage string"
+    rows = [("Cup", 6.5, 5.0, 0.0, True, 0, 6, 1, "finisher")] * 60          # typical finishers
+    rows += [("Cup", 6.5, 0.0, 5.0, True, 24, 0, 0, None)] * 60              # typical bowlers
+    rows += [("Cup", 9.5, 20.0, -5.0, True, 24, 11, 0, "finisher")] * 40     # Springer-like, batting-led
+    df = spark.createDataFrame(rows, cols)
+    [raw] = validation.role_balance(df)
+    [role] = validation.role_balance(df, by_role=True)
+    assert "fair share 62.5%" in raw["target"] and not raw["passed"]          # 100 of 160 "bowling"
+    assert "fair share 37.5%" in role["target"]                                # 60 of 160
+    assert role["value"] == 0.0
 
 
 def test_both_roles(spark):
