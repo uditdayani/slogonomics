@@ -251,11 +251,11 @@ def _record_params(spark: SparkSession, t: Tables, version: str, p: ModelParams)
 
 
 def run_scale(spark: SparkSession, t: Tables, version: str, secondary_k: Optional[float] = None,
-              secondary_c: Optional[float] = None) -> dict:
+              secondary_c: Optional[float] = None, raw_blend: Optional[float] = None) -> dict:
     """Ratings and form for one model version (re-running replaces it), with that version's
     settings (params.py); `secondary_k` / `secondary_c` override the all-rounder weighting.
     Needs 06 first."""
-    p = for_version(version, secondary_k=secondary_k, secondary_c=secondary_c)
+    p = for_version(version, secondary_k=secondary_k, secondary_c=secondary_c, raw_blend=raw_blend)
     impacts = spark.table(t.gold_player_match_impact).filter(F.col("version") == version).drop("version")
     if impacts.limit(1).count() == 0:
         raise ValueError(f"No match impacts for model version {version}: run 06_gold_ratings first")

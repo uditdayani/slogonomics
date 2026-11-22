@@ -132,9 +132,9 @@ Spot-checking real matches after V2.1 turned up seven judgement calls (none were
 | 1 | Par came from the season and ground only, so a slow innings on a slow pitch was over-penalised | The scoring level moves 40% of the way towards the match's own scoring rate (ratio held to 0.6–1.6) |
 | 2 | With many wickets down a ball barely costs anything, so a slow rebuild with the tail looked too good | A batter is charged at least half the par runs for each ball he faces (bowlers unchanged) |
 | 3 | One ball either side of the 60- and 30-balls-left lines changed the comparison group | Within 10 balls of an edge, the innings is also ranked against the neighbouring stage and the two blended (50/50 at the edge) |
-| 4, 7 | An all-rounder's "smaller part" was judged by raw balls: Springer's 35* off 11 as a finisher counted only 11/35 next to 24 balls bowled | Each part is measured against a typical innings at that stage or a typical spell; the part that's smaller *for its role* counts `r / (r + 1)` |
+| 4, 7 | An all-rounder's "smaller part" was judged by raw balls: Springer's 35* off 11 as a finisher counted only 11/35 next to 24 balls bowled | Each part is measured against a typical innings at that stage or a typical spell; the part that's smaller *for its role* counts `r / (r + 1.5)` |
 | 5 | The bottom quarter was squeezed between 3.0 and 5.8, so common failures looked mild | New anchors: 10th percentile → 4.5, 25th → 5.5 (median and top unchanged) |
-| 6 | Role-relative ranking rated a costly opener failure (−17 runs) above a rarer but cheaper bowling failure (−15 runs) | 20% of the score is the plain within-competition rank of impact in runs |
+| 6 | Role-relative ranking rated a costly opener failure (−17 runs) above a rarer but cheaper bowling failure (−15 runs) | 10% of the score is the plain within-competition rank of impact in runs (20% brought back part of V1's batting bias) |
 
 ## Validation
 

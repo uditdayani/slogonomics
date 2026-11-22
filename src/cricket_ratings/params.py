@@ -40,8 +40,11 @@ class ModelParams:
 
 
 V3 = ModelParams()
+# First v4 run (22 Nov): raw_blend 0.2 brought back part of V1's batting/opener bias (bowling
+# share 42% vs a fair 48% in full-member T20Is) and secondary_c 1.0 let players who did both
+# crowd the extremes (1.32 in other T20Is). Tuned to 0.1 and 1.5.
 V4 = ModelParams(match_par_weight=0.4, min_ball_charge=0.5, stage_blend_balls=10,
-                 secondary="role", secondary_c=1.0, anchors=ANCHORS_V4, raw_blend=0.2)
+                 secondary="role", secondary_c=1.5, anchors=ANCHORS_V4, raw_blend=0.1)
 BY_VERSION = {"v1": V3, "v2": V3, "v3": V3, "v4": V4}
 
 
