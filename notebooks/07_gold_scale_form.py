@@ -25,7 +25,7 @@ from cricket_ratings.config import Tables
 dbutils.widgets.text("catalog", "workspace")
 dbutils.widgets.text("model_version", "v4")
 # All-rounder weighting overrides; blank = the version's own setting (params.py).
-# v3 uses secondary_balls_k (24); v4+ uses secondary_c (1.5). Higher = the smaller part counts less.
+# v3 uses secondary_balls_k (24); v4+ uses secondary_c (2.0). Higher = the smaller part counts less.
 # raw_blend (v4+, 0.1): share of the score from the plain rank of runs added; higher favours
 # batters and openers (V1's bias), lower favours role-fairness.
 dbutils.widgets.text("secondary_balls_k", "")

@@ -45,8 +45,9 @@ V3 = ModelParams()
 # First v4 runs (22 Nov) used secondary="role": a bowler's full spell next to a typical tail-end
 # innings (both "typical") was discounted as the smaller part, so bowling-led 9+ ratings fell.
 # "stage" keeps v3's main part (more balls) and only judges a short innings against its stage.
+# secondary_c 2.0: at 1.5 players who did both reached 1.30 in the IPL (limit 1.3); at 2.0, 1.25.
 V4 = ModelParams(match_par_weight=0.4, min_ball_charge=0.5, stage_blend_balls=10,
-                 secondary="stage", secondary_c=1.5, anchors=ANCHORS_V4, raw_blend=0.1)
+                 secondary="stage", secondary_c=2.0, anchors=ANCHORS_V4, raw_blend=0.1)
 BY_VERSION = {"v1": V3, "v2": V3, "v3": V3, "v4": V4}
 
 
