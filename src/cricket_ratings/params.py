@@ -27,9 +27,11 @@ class ModelParams:
     min_ball_charge: float = 0.0    # 2: a batter is charged at least this share of par runs per ball
     # --- 0-10 scale (07)
     stage_blend_balls: int = 0      # 3: within this many balls of a stage edge, blend with the next stage
-    secondary: str = "balls"        # 4/7: "balls": smaller part by raw balls, weight n/(n+k);
-    secondary_k: float = 24.0       #      "role": by balls relative to a typical innings (for that
-    secondary_c: float = 1.0        #      stage) or spell, weight r/(r+c)
+    secondary: str = "balls"        # 4/7: "balls" (v3): smaller part by raw balls, weight n/(n+k).
+    secondary_k: float = 24.0       #   "stage" (v4): smaller part by raw balls, weight n/(n + c x a
+    secondary_c: float = 1.0        #   typical innings at that stage, or a typical spell).
+                                    #   ("role", tried first: smaller part by balls relative to a
+                                    #   typical innings/spell; ties discounted bowlers' full spells.)
     anchors: Tuple[Tuple[float, float], ...] = ANCHORS_V3   # 5
     raw_blend: float = 0.0          # 6: share of the score from the plain within-competition rank of impact
 
@@ -40,11 +42,11 @@ class ModelParams:
 
 
 V3 = ModelParams()
-# First v4 run (22 Nov): raw_blend 0.2 brought back part of V1's batting/opener bias (bowling
-# share 42% vs a fair 48% in full-member T20Is) and secondary_c 1.0 let players who did both
-# crowd the extremes (1.32 in other T20Is). Tuned to 0.1 and 1.5.
+# First v4 runs (22 Nov) used secondary="role": a bowler's full spell next to a typical tail-end
+# innings (both "typical") was discounted as the smaller part, so bowling-led 9+ ratings fell.
+# "stage" keeps v3's main part (more balls) and only judges a short innings against its stage.
 V4 = ModelParams(match_par_weight=0.4, min_ball_charge=0.5, stage_blend_balls=10,
-                 secondary="role", secondary_c=1.5, anchors=ANCHORS_V4, raw_blend=0.1)
+                 secondary="stage", secondary_c=1.5, anchors=ANCHORS_V4, raw_blend=0.1)
 BY_VERSION = {"v1": V3, "v2": V3, "v3": V3, "v4": V4}
 
 

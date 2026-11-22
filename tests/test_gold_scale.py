@@ -279,5 +279,25 @@ def test_v4_end_to_end_and_params_recorded(spark, built):  # noqa: F811
     assert r.filter("involved AND (rating < 3 OR rating > 10)").count() == 0
     import json
     params = json.loads(spark.table(t.gold_model_versions).filter("version = 'v4'").first()["params"])
-    assert params["raw_blend"] == V4.raw_blend and params["secondary"] == "role"
+    assert params["raw_blend"] == V4.raw_blend and params["secondary"] == "stage"
     assert params["min_ball_charge"] == V4.min_ball_charge and params["anchors"][2] == [0.10, 4.5]
+
+
+def test_stage_weighting_keeps_full_spells_whole(spark):
+    # "stage" (v4): Springer's innings is still the smaller part (11 < 24 balls) but is weighted
+    # against a typical finisher innings (6 balls): 11 / (11 + 1.5 x 6) = 0.55, not 11/35.
+    # A bowler who faced a typical 6 balls keeps his full spell (the "role" rule discounted it).
+    rows = [v4_perf(f"f{i}", "finisher", bat=-6 + i * 16 / 60, faced=6, entry=20) for i in range(61)]
+    rows += [v4_perf(f"b{i}", bowl=-40 + i, bowled=24) for i in range(61)]
+    rows.append(v4_perf("springer", "finisher", bat=12, bowl=-20, faced=11, bowled=24, entry=20))
+    rows.append(v4_perf("bowler_bats_6", "finisher", bat=0, bowl=15, faced=6, bowled=24, entry=10))
+    df = spark.createDataFrame(rows, V4_COLS)
+    stage = {r.player_id: r for r in gold_scale.rate(df, params=ModelParams(secondary="stage", secondary_c=1.5)).collect()}
+    role = {r.player_id: r for r in gold_scale.rate(df, params=ModelParams(secondary="role", secondary_c=1.5)).collect()}
+    sp = stage["springer"]
+    assert sp.score == pytest.approx(sp.batting_score * 11 / 20 + sp.bowling_score, abs=0.01)
+    b = stage["bowler_bats_6"]
+    assert b.score == pytest.approx(b.batting_score * 6 / 15 + b.bowling_score, abs=0.01)   # spell in full
+    rb = role["bowler_bats_6"]
+    assert rb.score == pytest.approx(rb.batting_score + rb.bowling_score * 0.4, abs=0.01)   # the flaw
+    assert b.rating > rb.rating

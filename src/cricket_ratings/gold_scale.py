@@ -172,6 +172,21 @@ def rate(impacts: DataFrame, secondary_k: float = SECONDARY_BALLS_K,
         c = F.lit(float(p.secondary_c))
         bat_w = F.when(both & (r_bat < r_bowl), r_bat / (r_bat + c)).otherwise(F.lit(1.0))
         bowl_w = F.when(both & ~(r_bat < r_bowl), r_bowl / (r_bowl + c)).otherwise(F.lit(1.0))
+    elif p.secondary == "stage":
+        # v4: the main part is the one with more balls (as v3), so a bowler's full spell always
+        # counts in full; a smaller batting part is weighted against a typical innings at its
+        # stage (a finisher's 11 balls is a real innings), a smaller spell against a typical spell.
+        typ_bat = (inv.filter("_batted").groupBy("competition", "_stage")
+                   .agg(F.percentile_approx("balls_faced", 0.5).cast("double").alias("_typ_bat")))
+        typ_bowl = (inv.filter("_bowled").groupBy("competition")
+                    .agg(F.percentile_approx("balls_bowled", 0.5).cast("double").alias("_typ_bowl")))
+        inv = inv.join(F.broadcast(typ_bat), ["competition", "_stage"], "left") \
+                 .join(F.broadcast(typ_bowl), "competition", "left")
+        c = F.lit(float(p.secondary_c))
+        k_bat = c * F.greatest(F.coalesce(F.col("_typ_bat"), F.lit(6.0)), F.lit(1.0))
+        k_bowl = c * F.greatest(F.coalesce(F.col("_typ_bowl"), F.lit(24.0)), F.lit(1.0))
+        bat_w = F.when(both & (faced < bowled_n), faced / (faced + k_bat)).otherwise(F.lit(1.0))
+        bowl_w = F.when(both & ~(faced < bowled_n), bowled_n / (bowled_n + k_bowl)).otherwise(F.lit(1.0))
     else:
         bat_secondary = both & (faced < bowled_n)
         bowl_secondary = both & ~(faced < bowled_n)
