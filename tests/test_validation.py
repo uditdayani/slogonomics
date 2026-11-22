@@ -51,16 +51,20 @@ def test_era_flatness(spark):
         k = round(n * pct9 / 100)
         return [(comp, dt.date(year, 5, 1), True, 9.5)] * k + [(comp, dt.date(year, 5, 1), True, 6.5)] * (n - k)
     rows = []
-    for y, p in ((2015, 3.0), (2020, 3.5), (2025, 4.0)):
+    for y, p in ((2015, 3.0), (2020, 3.6), (2025, 3.2)):
         rows += season("Flat", y, p)
-    for y, p in ((2015, 2.0), (2020, 3.0), (2025, 5.0)):
+    for y, p in ((2015, 2.0), (2020, 3.0), (2025, 5.0)):                   # V1-like: rising
         rows += season("Drifting", y, p)
+    for y, p in ((2015, 2.0), (2018, 4.6), (2021, 2.0), (2025, 3.0)):      # one wild season, no trend
+        rows += season("Noisy", y, p)
     rows += season("Tiny", 2025, 9.0, n=200)                                 # too small: ignored
     r = by_scope(validation.era_flatness(spark.createDataFrame(
         rows, "competition string, match_date date, involved boolean, rating double")))
-    assert r[("era_9_plus_range", "Flat")]["passed"] and r[("era_9_plus_range", "Flat")]["value"] == 1.0
-    assert not r[("era_9_plus_range", "Drifting")]["passed"]
-    assert ("era_9_plus_range", "Tiny") not in r
+    assert r[("era_9_plus_drift", "Flat")]["passed"] and r[("era_9_plus_drift", "Flat")]["value"] == 0.2
+    assert not r[("era_9_plus_drift", "Drifting")]["passed"]                 # +3 points
+    noisy = r[("era_9_plus_drift", "Noisy")]
+    assert noisy["passed"] and "range 2.60" in noisy["detail"]               # the old check failed this
+    assert ("era_9_plus_drift", "Tiny") not in r
 
 
 RATING_COLS = ("batting_stage string, rating double, involved boolean, balls_bowled int, "

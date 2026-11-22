@@ -147,7 +147,7 @@ Spot-checking real matches after V2.1 turned up seven judgement calls (none were
 | Dismissals costing over 25 runs | fewer than 1 in 10,000 |
 | Median rating per competition | 6.2–6.8 |
 | Ratings at 9.3+ per competition | 0.5–2% |
-| Share of 9+ ratings: highest season minus lowest (seasons with 1,000+ ratings) | at most 2.5 points |
+| Share of 9+ ratings: trend across seasons (seasons with 1,000+ ratings; one noisy season can't fail it) | within ±1 point over the whole span |
 | 9+ ratings driven mainly by bowling | within 5 points of bowling's fair share (performances led by bowling ÷ all; a performance with both counts once, by the part with more balls) |
 | Players who batted and bowled: share of 9+ (or 4 or less) ÷ share of all ratings | at most 1.3 |
 | Batting stages: widest / narrowest rating spread | at most 1.3 |

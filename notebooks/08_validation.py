@@ -12,7 +12,7 @@
 # MAGIC | Dismissals costing over 25 runs | fewer than 1 in 10,000 |
 # MAGIC | Median rating per competition | 6.2–6.8 |
 # MAGIC | Share of ratings at 9.3+ per competition | 0.5–2% |
-# MAGIC | Share of 9+ ratings: highest season minus lowest (seasons with 1,000+ ratings) | at most 2.5 points |
+# MAGIC | Share of 9+ ratings: trend across seasons (seasons with 1,000+ ratings; one noisy season can't fail it) | within ±1 point over the whole span |
 # MAGIC | Share of 9+ ratings driven mainly by bowling | within 5 points of bowling's fair share |
 # MAGIC | Batted and bowled: share of 9+ (or 4 or less) ÷ share of all ratings | at most 1.3 |
 # MAGIC | Batting stages (opener → finisher): widest / narrowest rating spread | at most 1.3 |

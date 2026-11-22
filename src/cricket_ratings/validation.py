@@ -19,7 +19,7 @@ CALIBRATION_MIN_INNINGS = 50
 RAIN_MAX_RUNS = 5.0            # |avg first-innings runs added| in rain-affected matches
 MAX_WICKET_COST = 25.0         # runs; a single dismissal shouldn't cost more...
 MAX_COSTLY_PER_10K = 1.0       # ...except in fewer than 1 in 10,000 dismissals
-ERA_MAX_RANGE = 2.5            # percentage points between seasons' shares of 9+ ratings
+ERA_MAX_DRIFT = 1.0            # percentage points of trend in the 9+ share across all seasons
 ERA_MIN_RATED = 1000           # only seasons with enough rated performances
 STAGE_MAX_SPREAD_RATIO = 1.3   # widest / narrowest rating spread across batting stages
 STAGE_MAX_SHARE_RATIO = 2.0    # highest / lowest share of 9+ (and of 4 or less) across stages
@@ -95,18 +95,33 @@ def wicket_costs(ball_values: DataFrame) -> List[dict]:
 
 
 def era_flatness(ratings: DataFrame) -> List[dict]:
-    """The share of 9+ ratings should be roughly the same every season. V1 ranged from about
-    2% to 5% because high-scoring modern seasons produce bigger swings in runs."""
+    """The share of 9+ ratings shouldn't drift across seasons. V1's did: it rose to about 5% in
+    high-scoring modern seasons. Measured as the trend (least-squares line through each
+    season's share, weighted by its ratings) across the whole span, so one noisy season can't
+    fail it: with about 1,400 ratings a season, chance alone moves single seasons by +-0.5
+    points and the highest-minus-lowest range of 19 seasons is typically 1.8 points."""
     yearly = (ratings.filter("involved").groupBy("competition", F.year("match_date").alias("year"))
               .agg(F.count("*").alias("n"), (100 * F.avg((F.col("rating") >= 9).cast("double"))).alias("pct"))
-              .filter(F.col("n") >= ERA_MIN_RATED))
-    rows = (yearly.groupBy("competition").agg(F.count("*").alias("years"), F.min("pct").alias("lo"),
-                                              F.max("pct").alias("hi"))
-            .filter("years >= 3").orderBy("competition").collect())
-    return [_row("era_9_plus_range", r.competition, round(r.hi - r.lo, 2), f"<= {ERA_MAX_RANGE} points",
-                 r.hi - r.lo <= ERA_MAX_RANGE,
-                 f"{r.years} seasons with {ERA_MIN_RATED}+ ratings: {r.lo:.1f}% to {r.hi:.1f}% rated 9+")
-            for r in rows]
+              .filter(F.col("n") >= ERA_MIN_RATED)).collect()
+    out = []
+    for comp in sorted({r.competition for r in yearly}):
+        seasons = sorted((r.year, r.pct, r.n) for r in yearly if r.competition == comp)
+        if len(seasons) < 3:
+            continue
+        years = [y for y, _, _ in seasons]
+        pcts = [p for _, p, _ in seasons]
+        weights = [n for _, _, n in seasons]
+        wsum = sum(weights)
+        my = sum(w * y for w, y in zip(weights, years)) / wsum
+        mp = sum(w * p for w, p in zip(weights, pcts)) / wsum
+        slope = (sum(w * (y - my) * (p - mp) for w, y, p in zip(weights, years, pcts))
+                 / max(sum(w * (y - my) ** 2 for w, y in zip(weights, years)), 1e-9))
+        drift = slope * (years[-1] - years[0])
+        out.append(_row("era_9_plus_drift", comp, round(drift, 2), f"|trend| <= {ERA_MAX_DRIFT} points",
+                        abs(drift) <= ERA_MAX_DRIFT,
+                        f"{len(seasons)} seasons with {ERA_MIN_RATED}+ ratings, {years[0]}-{years[-1]}: "
+                        f"{min(pcts):.1f}% to {max(pcts):.1f}% rated 9+ (range {max(pcts) - min(pcts):.2f})"))
+    return out
 
 
 def _pure_batters(ratings: DataFrame) -> DataFrame:
