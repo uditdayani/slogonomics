@@ -2,7 +2,7 @@
 # MAGIC %md
 # MAGIC # Week 3 – fit the model tables (Gold)
 # MAGIC
-# MAGIC Builds, under a model version (default `v2`):
+# MAGIC Builds, under a model version (default `v4`):
 # MAGIC
 # MAGIC | Table | What it holds |
 # MAGIC | --- | --- |
@@ -27,7 +27,7 @@ from cricket_ratings import gold_model
 from cricket_ratings.config import Tables
 
 dbutils.widgets.text("catalog", "workspace")
-dbutils.widgets.text("model_version", "v2")
+dbutils.widgets.text("model_version", "v4")
 dbutils.widgets.text("min_date", "2019-01-01")   # fit the RE shape on modern seasons; blank = all
 t = Tables(catalog=dbutils.widgets.get("catalog"))
 VERSION = dbutils.widgets.get("model_version")

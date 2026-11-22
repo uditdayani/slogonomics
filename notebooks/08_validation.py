@@ -30,7 +30,7 @@ from cricket_ratings import validation
 from cricket_ratings.config import Tables
 
 dbutils.widgets.text("catalog", "workspace")
-dbutils.widgets.text("model_version", "v3")
+dbutils.widgets.text("model_version", "v4")
 t = Tables(catalog=dbutils.widgets.get("catalog"))
 VERSION = dbutils.widgets.get("model_version")
 
