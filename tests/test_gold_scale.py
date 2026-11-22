@@ -198,3 +198,86 @@ def test_a_small_second_part_counts_partly(spark):
     duck, only = r["bowler_tail_duck"], r["bowler_only"]
     assert duck.score == pytest.approx(duck.bowling_score + duck.batting_score * 2 / 26, abs=0.01)
     assert duck.batting_score < -3 and only.score - duck.score < 0.75   # unweighted, it would cost 3+
+
+
+# ------------------------------------------------------------- v4 refinements (params.py)
+
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+
+from cricket_ratings.params import ANCHORS_V4, V4, ModelParams  # noqa: E402
+
+V4_COLS = ROLE_COLS + ", entry_balls_left int"
+
+
+def v4_perf(pid, stage=None, bat=0.0, bowl=0.0, faced=0, bowled=0, entry=None, comp="Cup"):
+    return role_perf(pid, stage, bat=bat, bowl=bowl, faced=faced, bowled=bowled, comp=comp) + (entry,)
+
+
+def test_v4_anchors_make_failures_read_harsher(spark):
+    p = spark.createDataFrame([(x,) for x in (0.10, 0.25, 0.5, 0.99)], "p double")
+    got = [round(r.r, 2) for r in p.select(gold_scale.anchor_rating(F.col("p"), ANCHORS_V4).alias("r")).collect()]
+    assert got == [4.5, 5.5, 6.5, 9.3]
+
+
+def test_stage_edges_are_smoothed(spark):
+    rng = np.random.default_rng(3)
+    rows = [v4_perf(f"t{i}", "top order", bat=-30 + i * 80 / 60, faced=20, entry=int(rng.integers(61, 119)))
+            for i in range(61)]
+    rows += [v4_perf(f"m{i}", "middle order", bat=-15 + i * 40 / 60, faced=12, entry=int(rng.integers(31, 60)))
+             for i in range(61)]
+    rows += [v4_perf("edge_top", "top order", bat=20, faced=20, entry=61),
+             v4_perf("edge_mid", "middle order", bat=20, faced=20, entry=60),
+             v4_perf("far_top", "top order", bat=20, faced=20, entry=110)]
+    df = spark.createDataFrame(rows, V4_COLS)
+    hard = {r.player_id: r for r in gold_scale.rate(df).collect()}
+    soft = {r.player_id: r for r in gold_scale.rate(df, params=ModelParams(stage_blend_balls=10)).collect()}
+    gap_hard = abs(hard["edge_top"].batting_score - hard["edge_mid"].batting_score)
+    gap_soft = abs(soft["edge_top"].batting_score - soft["edge_mid"].batting_score)
+    assert gap_soft < 0.25 * gap_hard                     # one ball apart: nearly the same score now
+    assert soft["far_top"].batting_score == hard["far_top"].batting_score   # far from an edge: unchanged
+
+
+def test_all_rounders_weighted_by_role_norms(spark):
+    # Springer: 35* off 11 as a finisher (typical finisher innings: 6 balls) and a poor full
+    # spell. By raw balls his innings was the small part (11 vs 24); by role it's the spell.
+    rows = [v4_perf(f"f{i}", "finisher", bat=-6 + i * 16 / 60, faced=6, entry=20) for i in range(61)]
+    rows += [v4_perf(f"b{i}", bowl=-40 + i, bowled=24) for i in range(61)]
+    rows.append(v4_perf("springer", "finisher", bat=12, bowl=-20, faced=11, bowled=24, entry=20))
+    df = spark.createDataFrame(rows, V4_COLS)
+    old = {r.player_id: r for r in gold_scale.rate(df).collect()}["springer"]
+    new = {r.player_id: r for r in gold_scale.rate(df, params=ModelParams(secondary="role")).collect()}["springer"]
+    assert old.score == pytest.approx(old.batting_score * 11 / 35 + old.bowling_score, abs=0.01)
+    r_bowl = 1.0                                           # 24 balls, a typical spell
+    assert new.score == pytest.approx(new.batting_score + new.bowling_score * r_bowl / (r_bowl + 1), abs=0.01)
+    assert new.rating > old.rating
+
+
+def test_raw_blend_counts_the_cost_to_the_team(spark):
+    rows = [v4_perf(f"o{i}", "opener", bat=-30 + i * 80 / 60, faced=20, entry=120) for i in range(61)]
+    rows += [v4_perf(f"b{i}", bowl=-20 + i * 0.5, bowled=24) for i in range(61)]
+    df = spark.createDataFrame(rows, V4_COLS)
+    plain = gold_scale.rate(df).toPandas().set_index("player_id")
+    blend = gold_scale.rate(df, params=ModelParams(raw_blend=0.2)).toPandas().set_index("player_id")
+    n = len(plain)
+    rank = plain["level_impact"].rank(method="min") - 1
+    z_raw = np.log(((rank + 0.5) / n) / (1 - (rank + 0.5) / n))
+    expected = 0.8 * plain["score"] + 0.2 * z_raw
+    assert np.allclose(blend["score"], expected.loc[blend.index], atol=1e-3)
+    # the worst opener (-30 runs) and worst bowler (-20 runs) were level; now the costlier one is lower
+    assert plain.loc["o0", "score"] == pytest.approx(plain.loc["b0", "score"], abs=1e-6)
+    assert blend.loc["o0", "score"] < blend.loc["b0", "score"]
+
+
+def test_v4_end_to_end_and_params_recorded(spark, built):  # noqa: F811
+    t, _, _ = built
+    gold_model.fit_model(spark, t, "v4", min_samples=1)
+    gold_ratings.run_ratings(spark, t, "v4")
+    summary = gold_scale.run_scale(spark, t, "v4")
+    assert summary["rated_performances"] > 0
+    r = spark.table(t.gold_player_match_ratings).filter("version = 'v4'")
+    assert r.filter("involved AND (rating < 3 OR rating > 10)").count() == 0
+    import json
+    params = json.loads(spark.table(t.gold_model_versions).filter("version = 'v4'").first()["params"])
+    assert params["raw_blend"] == V4.raw_blend and params["secondary"] == "role"
+    assert params["min_ball_charge"] == V4.min_ball_charge and params["anchors"][2] == [0.10, 4.5]

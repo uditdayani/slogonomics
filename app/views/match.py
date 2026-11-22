@@ -94,10 +94,10 @@ if not mom.empty:
     x = alt.X("overs:Q", title="Overs", scale=alt.Scale(domain=[0, 20]))
     y = alt.Y("projected:Q", title="Projected total", scale=alt.Scale(zero=False))
     colour = alt.Color("team:N", title=None, legend=alt.Legend(orient="bottom", labelLimit=300),
-                       scale=alt.Scale(domain=[m["inn1_team"], m["inn2_team"]], range=["#1f4e9a", "#e07b00"]))
+                       scale=alt.Scale(domain=[m["inn1_team"], m["inn2_team"]], range=["#5B8DEF", "#F0A030"]))
     line = alt.Chart(mom).mark_line(interpolate="step-after").encode(x=x, y=y, color=colour, tooltip=tooltip)
     wickets = alt.Chart(mom[mom["dismissals"] > 0]).mark_point(filled=True, size=55, shape="circle",
-                                                              color="#c0392b").encode(x=x, y=y, tooltip=tooltip)
+                                                              color="#E5484D").encode(x=x, y=y, tooltip=tooltip)
     layers = [line, wickets]
     if pd.notna(m["inn1_runs"]) and (mom["innings_no"] == 2).any():
         target = pd.DataFrame({"target": [int(m["inn1_runs"]) + 1]})

@@ -24,6 +24,7 @@ from pyspark.sql import functions as F
 from . import storage
 from .config import Tables
 from .gold_model import MAX_WICKETS, TOTAL_BALLS, competition_col
+from .params import ModelParams, for_version, record
 from .schema import BOWLER_WICKET_KINDS, NOT_DISMISSALS, wickets_band
 
 # Share of a wicket's value earned by the bowler and by the fielders (starting values, tuned in week 6).
@@ -75,9 +76,15 @@ def rated_matches(spark: SparkSession, t: Tables) -> DataFrame:
 
 
 def ball_values(deliveries: DataFrame, rated: DataFrame, re: DataFrame,
-                env: DataFrame, venues: DataFrame, par: Optional[DataFrame] = None) -> DataFrame:
+                env: DataFrame, venues: DataFrame, par: Optional[DataFrame] = None,
+                match_par_weight: float = 0.0) -> DataFrame:
     """One row per ball of innings 1 and 2: the state before and after, and its value.
-    With `par` (gold.par_rates), also what a typical bowler concedes and takes on that ball."""
+    With `par` (gold.par_rates), also what a typical bowler concedes and takes on that ball.
+
+    `match_par_weight` (v4) moves the scoring level part of the way towards the match itself:
+    scale x (the match's runs per ball / the runs per ball expected there) ** weight, so on a
+    slow pitch a slow innings isn't judged against the season's par alone. The ratio is held
+    to 0.6-1.6, and the weight below 1 keeps any one innings from setting its own par."""
     d = deliveries.filter("innings_no IN (1, 2) AND NOT is_super_over").join(rated, "match_id")
     in_order = Window.partitionBy("match_id", "innings_no").orderBy("seq")
     before = in_order.rowsBetween(Window.unboundedPreceding, -1)
@@ -117,6 +124,18 @@ def ball_values(deliveries: DataFrame, rated: DataFrame, re: DataFrame,
           .join(re_as("b_after", "w_before", "re1"), ["b_after", "w_before"], "left")
           .join(re_as("b_after", "w_after", "re2"), ["b_after", "w_after"], "left"))
 
+    if match_par_weight:
+        whole_match = Window.partitionBy("match_id")
+        first_ball = Window.partitionBy("match_id").orderBy("innings_no", "seq")
+        start = F.first(F.when(F.col("innings_no") == 1, F.col("re0") / F.col("innings_allotted")),
+                        ignorenulls=True).over(first_ball.rowsBetween(Window.unboundedPreceding,
+                                                                      Window.unboundedFollowing))
+        actual = F.sum("runs_total").over(whole_match) / F.greatest(F.sum(legal).over(whole_match), F.lit(1))
+        ratio = actual / (F.col("scale") * start)
+        factor = F.pow(F.least(F.greatest(F.coalesce(ratio, F.lit(1.0)), F.lit(0.6)), F.lit(1.6)),
+                       F.lit(float(match_par_weight)))
+        d = d.withColumn("scale", F.col("scale") * factor)
+
     d = d.withColumn("over_no", F.least(F.col("over"), F.lit(19)) + 1) \
          .withColumn("wickets_band", wickets_band(F.col("w_before")))
     if par is not None:
@@ -152,7 +171,7 @@ def _credit(df: DataFrame, player: Column, **values: Column) -> DataFrame:
 
 
 def batting_stages(bv: DataFrame) -> DataFrame:
-    """(match_id, player_id, batting_stage) for everyone who came out to bat: "opener" if
+    """(match_id, player_id, batting_stage, entry_balls_left) for everyone who came out to bat: "opener" if
     there at the first ball, else by balls left at entry: >60 "top order" (in before over 11),
     >30 "middle order" (overs 11-15), otherwise "finisher" (last 5 overs)."""
     appear = (bv.select("match_id", "innings_no", "seq", "b_before", F.col("batter_id").alias("player_id"))
@@ -168,7 +187,8 @@ def batting_stages(bv: DataFrame) -> DataFrame:
     # A player bats once per match in innings 1-2; keep the earliest appearance if ever twice.
     w = Window.partitionBy("match_id", "player_id").orderBy("innings_no")
     return (first.withColumn("batting_stage", stage).withColumn("_rn", F.row_number().over(w))
-            .filter("_rn = 1").select("match_id", "player_id", "batting_stage"))
+            .filter("_rn = 1")
+            .select("match_id", "player_id", "batting_stage", F.col("balls_left_at_entry").alias("entry_balls_left")))
 
 
 def keeper_byes(bv: DataFrame, match_players: DataFrame) -> DataFrame:
@@ -190,13 +210,22 @@ def keeper_byes(bv: DataFrame, match_players: DataFrame) -> DataFrame:
     return _credit(keeper, F.col("player_id"), fielding=-F.col("byes"), byes_conceded=F.col("byes"))
 
 
-def player_impact(bv: DataFrame, match_players: DataFrame) -> DataFrame:
-    """Sum every player's credits per match. Every listed player gets a row, even with no involvement."""
+def player_impact(bv: DataFrame, match_players: DataFrame, min_ball_charge: float = 0.0) -> DataFrame:
+    """Sum every player's credits per match. Every listed player gets a row, even with no involvement.
+
+    `min_ball_charge` (v4): a batter is charged at least this share of the par runs for each
+    ball he faces. With many wickets down, a ball barely lowers expected runs (the side is
+    expected to be bowled out first), so a slow rebuild with the tail would cost almost
+    nothing; this keeps a floor under it. Bowlers' credits are unchanged."""
     not_wide = (F.col("extras_wides") == 0).cast("int")
     conceded = F.col("runs_batter") + F.col("extras_wides") + F.col("extras_noballs")
+    ball_charge = F.col("ball_cost")
+    if min_ball_charge:
+        ball_charge = F.least(F.col("ball_cost"),
+                              -F.lit(float(min_ball_charge)) * F.coalesce(F.col("par_runs"), F.lit(0.0)))
 
     striker = _credit(bv, F.col("batter_id"),
-                      batting=F.col("runs_batter") + F.col("ball_cost"),
+                      batting=F.col("runs_batter") + ball_charge,
                       runs=F.col("runs_batter"), balls_faced=not_wide)
     bowler = _credit(bv, F.col("bowler_id"),
                      bowling=-conceded - F.col("ball_cost"),
@@ -237,7 +266,7 @@ def player_impact(bv: DataFrame, match_players: DataFrame) -> DataFrame:
     filled = filled.join(batting_stages(bv), ["match_id", "player_id"], "left")
     return filled.withColumn(
         "total_impact", F.round(F.col("batting") + F.col("bowling") + F.col("fielding"), 3)
-    ).select("match_id", "player_id", "team", "batting_stage",
+    ).select("match_id", "player_id", "team", "batting_stage", "entry_balls_left",
              *[F.round(c, 3).alias(c) if NUMBERS[c] == "double" else c for c in NUMBERS],
              "total_impact")
 
@@ -267,8 +296,10 @@ def matchups(bv: DataFrame) -> DataFrame:
          .alias("runs_vs_par")))
 
 
-def run_ratings(spark: SparkSession, t: Tables, version: str) -> dict:
-    """Value every ball and credit players for one model version (re-running replaces it)."""
+def run_ratings(spark: SparkSession, t: Tables, version: str, params: Optional[ModelParams] = None) -> dict:
+    """Value every ball and credit players for one model version (re-running replaces it),
+    with that version's settings (params.py) unless `params` is given."""
+    p = params or for_version(version)
     def of_version(table):
         return spark.table(table).filter(F.col("version") == version).drop("version")
 
@@ -278,16 +309,19 @@ def run_ratings(spark: SparkSession, t: Tables, version: str) -> dict:
 
     par = of_version(t.gold_par_rates) if spark.catalog.tableExists(t.gold_par_rates) else None
     bv = ball_values(spark.table(t.silver_deliveries), rated_matches(spark, t), re,
-                     of_version(t.gold_environment_factors), of_version(t.gold_venue_factors), par)
+                     of_version(t.gold_environment_factors), of_version(t.gold_venue_factors), par,
+                     match_par_weight=p.match_par_weight)
     key = spark.createDataFrame([(version,)], "version string")
     bv = bv.withColumn("version", F.lit(version))
     storage.replace_rows(spark, t.gold_ball_values, bv, key, "version")
 
     stored = of_version(t.gold_ball_values)
-    impact = player_impact(stored, spark.table(t.silver_match_players)).withColumn("version", F.lit(version))
+    impact = (player_impact(stored, spark.table(t.silver_match_players), min_ball_charge=p.min_ball_charge)
+              .withColumn("version", F.lit(version)))
     storage.replace_rows(spark, t.gold_player_match_impact, impact, key, "version")
     storage.replace_rows(spark, t.gold_matchups, matchups(stored).withColumn("version", F.lit(version)),
                          key, "version")
+    record(spark, t, version, {"match_par_weight": p.match_par_weight, "min_ball_charge": p.min_ball_charge})
     return {"version": version,
             "balls_valued": stored.count(),
             "player_matches": of_version(t.gold_player_match_impact).count(),

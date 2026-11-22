@@ -225,3 +225,41 @@ def test_matchups_batter_against_bowler(spark, built):  # noqa: F811
     assert a3b1.runs_vs_par == pytest.approx(2 - 0.9 - 0.9)
     a3b2 = m[(A3, B2)]
     assert (a3b2.dismissals, a3b2.runs_vs_par) == (0, pytest.approx(-0.9))   # run out: not the bowler's
+
+
+# ------------------------------------------------------------- v4 refinements (params.py)
+
+def flat_par(spark, runs_per_ball):
+    rows = [(o, band, runs_per_ball, 0.05) for o in range(1, 21) for band in ("0-2", "3-5", "6+")]
+    return spark.createDataFrame(rows, "over_no int, wickets_band string, runs_per_ball double, "
+                                       "wickets_per_ball double")
+
+
+def test_minimum_ball_charge_for_batters_only(spark, built):  # noqa: F811
+    # Par 3.0 a ball, at least half charged: 1.5 a ball, more than A1's 1.0/0.9 ball costs.
+    t, _, _ = built
+    env, venues = factors(spark, 1.0)
+    bv = gold_ratings.ball_values(spark.table(t.silver_deliveries), gold_ratings.rated_matches(spark, t),
+                                  linear_re(spark), env, venues, par=flat_par(spark, 3.0))
+    mp = spark.table(t.silver_match_players)
+    plain = {r.player_id: r for r in gold_ratings.player_impact(bv, mp).filter("match_id = '1000001'").collect()}
+    floor = {r.player_id: r for r in gold_ratings.player_impact(bv, mp, min_ball_charge=0.5)
+             .filter("match_id = '1000001'").collect()}
+    assert plain[A1].batting == pytest.approx(8.2)
+    assert floor[A1].batting == pytest.approx((4 - 1.5) + (1 - 1.5) + (1 - 1.5) + (6 - 1.5))   # 6.0
+    assert floor[B1].bowling == pytest.approx(plain[B1].bowling)                             # bowlers unchanged
+    assert floor[A1].entry_balls_left is not None and floor[A1].batting_stage == "opener"
+
+
+def test_match_par_moves_the_scoring_level_towards_the_match(spark, built):  # noqa: F811
+    t, _, _ = built
+    env, venues = factors(spark, 1.0)
+    args = (spark.table(t.silver_deliveries), gold_ratings.rated_matches(spark, t), linear_re(spark), env, venues)
+    base = gold_ratings.ball_values(*args).filter("match_id = '1000001'").toPandas()
+    first = base[base["innings_no"] == 1].sort_values("seq").iloc[0]
+    expected_rate = first["expected_before"] / first["b_before"]
+    ratio = min(max(base["runs_total"].sum() / base["is_legal"].sum() / expected_rate, 0.6), 1.6)
+    for weight in (0.5, 1.0):
+        moved = gold_ratings.ball_values(*args, match_par_weight=weight).filter("match_id = '1000001'").toPandas()
+        assert moved["scale"].iloc[0] == pytest.approx(base["scale"].iloc[0] * ratio ** weight, rel=1e-6)
+    assert ratio != 1.0
